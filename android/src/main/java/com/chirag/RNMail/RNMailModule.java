@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.webkit.URLUtil;
 
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
@@ -33,12 +34,12 @@ public class RNMailModule extends ReactContextBaseJavaModule {
   }
 
   /**
-    * Converts a ReadableArray to a String array
-    *
-    * @param r the ReadableArray instance to convert
-    *
-    * @return array of strings
-  */
+   * Converts a ReadableArray to a String array
+   *
+   * @param r the ReadableArray instance to convert
+   *
+   * @return array of strings
+   */
   private String[] readableArrayToStringArray(ReadableArray r) {
     int length = r.size();
     String[] strArray = new String[length];
@@ -52,8 +53,14 @@ public class RNMailModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void mail(ReadableMap options, Callback callback) {
-    Intent i = new Intent(Intent.ACTION_SENDTO);
-    i.setData(Uri.parse("mailto:"));
+    Intent i;
+    if (options.hasKey("attachment") && !options.isNull("attachment")) {
+      i = new Intent(Intent.ACTION_SEND);
+      i.setType("vnd.android.cursor.dir/email");
+    } else {
+      i = new Intent(Intent.ACTION_SENDTO);
+      i.setData(Uri.parse("mailto:"));
+    }
 
     if (options.hasKey("subject") && !options.isNull("subject")) {
       i.putExtra(Intent.EXTRA_SUBJECT, options.getString("subject"));
@@ -82,8 +89,16 @@ public class RNMailModule extends ReactContextBaseJavaModule {
       ReadableMap attachment = options.getMap("attachment");
       if (attachment.hasKey("path") && !attachment.isNull("path")) {
         String path = attachment.getString("path");
-        File file = new File(path);
-        Uri p = Uri.fromFile(file);
+        Uri p;
+        // Check for valid URI
+        if (URLUtil.isValidUrl(path)) {
+          p = Uri.parse(path);
+        }
+        // Else this is an absolute file path
+        else {
+          File file = new File(path);
+          p = Uri.fromFile(file);
+        }
         i.putExtra(Intent.EXTRA_STREAM, p);
       }
     }
@@ -104,7 +119,13 @@ public class RNMailModule extends ReactContextBaseJavaModule {
         callback.invoke("error");
       }
     } else {
-      Intent chooser = Intent.createChooser(i, "Send Mail");
+      String chooserLabel;
+      if (options.hasKey("chooserLabel") && !options.isNull("chooserLabel")) {
+        chooserLabel = options.getString("chooserLabel");
+      } else {
+        chooserLabel = "Send Mail";
+      }
+      Intent chooser = Intent.createChooser(i, chooserLabel);
       chooser.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
       try {
